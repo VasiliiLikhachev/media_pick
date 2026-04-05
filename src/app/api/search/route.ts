@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 import Anthropic from '@anthropic-ai/sdk'
 import { MediaRow, ResultRow, SearchParams } from '@/lib/types'
 
@@ -56,7 +56,7 @@ async function fetchCandidates(keywords: string[], entityTypes: string[]): Promi
     }
   }
 
-  let query = supabase
+  let query = getSupabase()
     .from('media_base')
     .select('*')
     .limit(300)
