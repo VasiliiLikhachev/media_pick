@@ -2,11 +2,16 @@ export type EntityType = 'СМИ' | 'Конкурс' | 'Научные стат�
 
 export interface MediaRow {
   id: number
-  'Название': string | null
-  'Ссылка': string | null
-  'entity_type': string | null
-  'description': string | null
-  'topic': string | null
+  name: string | null
+  url: string | null
+  entity_type: string | null
+  base_name: string | null
+  price: string | null
+  currency: string | null
+  region: string | null
+  traffic: string | null
+  description: string | null
+  topic: string | null
   'Для кого': string | null
   'Для кого / есть ли органичения?': string | null
   'Категории или кластеры': string | null
@@ -14,18 +19,15 @@ export interface MediaRow {
   'Описание SimilarWeb': string | null
   'Описание generated': string | null
   'Отрасли': string | null
-  'Цена': string | null
-  'Валюта': string | null
-  'Из какой базы': string | null
   'Подтип': string | null
   'подтип.1': string | null
-  'Трафик': string | null
   'Тип публикации': string | null
   'Крайняя дата подачи': string | null
   'Доступные формы участия': string | null
   'Индексирование и архивирование': string | null
   'Страны': string | null
   'Недостатки издания': string | null
+  'Specifics': string | null
   [key: string]: string | number | null | undefined
 }
 

@@ -16,22 +16,22 @@ async function extractKeywords(task: string): Promise<string[]> {
     max_tokens: 300,
     messages: [{
       role: 'user',
-      content: `Извлеки 5-10 ключевых слов и фраз из следующего PR-задания для поиска подходящих медиа. 
+      content: `Извлеки 8-12 ключевых слов и фраз из следующего PR-задания для поиска подходящих медиа.
 Верни ТОЛЬКО JSON массив строк, без пояснений.
-Слова должны быть релевантны тематике, отрасли, аудитории.
+Слова должны быть короткими (1-2 слова), релевантны тематике, отрасли, аудитории.
+Включай как русские так и английские варианты ключевых слов если применимо.
 
 Задание: ${task}
 
-Пример ответа: ["технологии", "стартап", "инвестиции", "IT", "digital"]`
+Пример ответа: ["финтех", "банк", "технологии", "fintech", "IT", "инвестиции"]`
     }]
   })
-  
+
   const text = msg.content[0].type === 'text' ? msg.content[0].text : '[]'
   try {
     const clean = text.replace(/```json|```/g, '').trim()
     return JSON.parse(clean)
   } catch {
-    // fallback: split task into words
     return task.split(/\s+/).filter(w => w.length > 3).slice(0, 8)
   }
 }
@@ -47,10 +47,13 @@ async function fetchCandidates(keywords: string[], entityTypes: string[]): Promi
     'Номинации',
     'Описание SimilarWeb',
     'Описание generated',
-    'Отрасли'
+    'Отрасли',
+    'Specifics',
+    'name',
+    'region',
   ]
 
-  // Build OR conditions for ILIKE across all fields and keywords
+  // Build OR conditions for ILIKE
   const orConditions: string[] = []
   for (const field of semanticFields) {
     for (const kw of keywords) {
@@ -61,14 +64,12 @@ async function fetchCandidates(keywords: string[], entityTypes: string[]): Promi
   let query = getSupabase()
     .from('media_base')
     .select('*')
-    .limit(300)
+    .limit(400)
 
-  // Filter by entity types if specified
   if (entityTypes.length > 0) {
     query = query.in('entity_type', entityTypes)
   }
 
-  // Apply OR filter
   if (orConditions.length > 0) {
     query = query.or(orConditions.join(','))
   }
@@ -91,17 +92,18 @@ async function rankCandidates(
 ): Promise<ResultRow[]> {
   if (candidates.length === 0) return []
 
-  // Prepare compact candidate list for Claude
   const candidateList = candidates.map((row, idx) => ({
     idx,
-    name: row['Название'] || '',
-    type: row['entity_type'] || '',
-    description: row['description'] || row['Описание generated'] || '',
-    topics: row['topic'] || '',
+    name: row.name || '',
+    type: row.entity_type || '',
+    description: row.description || row['Описание generated'] || '',
+    topics: row.topic || '',
     industries: row['Отрасли'] || '',
     audience: row['Для кого'] || '',
     categories: row['Категории или кластеры'] || '',
     nominations: row['Номинации'] || '',
+    specifics: row['Specifics'] || '',
+    region: row.region || '',
     drawbacks: row['Недостатки издания'] || '',
   }))
 
@@ -134,7 +136,7 @@ ${JSON.stringify(candidateList, null, 2)}
   })
 
   const text = msg.content[0].type === 'text' ? msg.content[0].text : '[]'
-  
+
   let rankings: Array<{ idx: number; причина_выбора: string; тематика: string }> = []
   try {
     const clean = text.replace(/```json|```/g, '').trim()
@@ -144,24 +146,23 @@ ${JSON.stringify(candidateList, null, 2)}
     throw new Error('Claude вернул невалидный JSON')
   }
 
-  // Map rankings back to full rows
   return rankings.map((r, position) => {
     const row = candidates[r.idx]
     if (!row) return null
 
     const subtype = row['Подтип'] || row['подтип.1'] || ''
-    
+
     return {
       Критерий: String(position + 1),
-      Название: row['Название'] || '',
-      Ссылка: row['Ссылка'] || '',
-      'Цена из базы': row['Цена'] || '',
-      Валюта: row['Валюта'] || '',
+      Название: row.name || '',
+      Ссылка: row.url || '',
+      'Цена из базы': row.price || '',
+      Валюта: row.currency || '',
       'Причина выбора': r.причина_выбора || '',
       Тематика: r.тематика || '',
-      'Из какой базы': row['Из какой базы'] || '',
+      'Из какой базы': row.base_name || '',
       Подтип: subtype,
-      Трафик: row['Трафик'] || '',
+      Трафик: row.traffic || '',
       'Тип публикации': row['Тип публикации'] || '',
       'Дата проведения': row['Крайняя дата подачи'] || '',
       'Формы участия': row['Доступные формы участия'] || '',
@@ -179,20 +180,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Задание слишком короткое' }, { status: 400 })
     }
 
-    // Step 1: Extract keywords
     const keywords = await extractKeywords(task)
-    
-    // Step 2: Fetch candidates from Supabase
     const candidates = await fetchCandidates(keywords, entityTypes)
-    
+
     if (candidates.length === 0) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         results: [],
         meta: { keywords, candidatesFound: 0 }
       })
     }
 
-    // Step 3: Rank with Claude
     const results = await rankCandidates(task, candidates, topN)
 
     return NextResponse.json({
