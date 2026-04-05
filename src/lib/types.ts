@@ -52,4 +52,5 @@ export interface ResultRow {
   'Дата проведения': string
   'Формы участия': string
   'Индексирование и архивирование': string
+  Регион: string
 }

@@ -246,6 +246,7 @@ export default function HomePage() {
                     <th>Цена</th>
                     <th>Подтип</th>
                     <th>Трафик</th>
+                    <th>Регион</th>
                     <th>Тип публикации</th>
                     <th>Дата / Дедлайн</th>
                     <th>Формы участия</th>
@@ -292,6 +293,9 @@ export default function HomePage() {
                       </td>
                       <td className="traffic-cell">
                         {row.Трафик || <span style={{ color: 'var(--text-dim)' }}>—</span>}
+                      </td>
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        {row.Регион || <span style={{ color: 'var(--text-dim)' }}>—</span>}
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {row['Тип публикации'] || <span style={{ color: 'var(--text-dim)' }}>—</span>}
