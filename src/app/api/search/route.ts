@@ -3,13 +3,15 @@ import { getSupabase } from '@/lib/supabase'
 import Anthropic from '@anthropic-ai/sdk'
 import { MediaRow, ResultRow, SearchParams } from '@/lib/types'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-})
+function getAnthropic() {
+  return new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY!,
+  })
+}
 
 // Step 1: Extract keywords from task using Claude
 async function extractKeywords(task: string): Promise<string[]> {
-  const msg = await anthropic.messages.create({
+  const msg = await getAnthropic().messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 300,
     messages: [{
@@ -125,7 +127,7 @@ ${JSON.stringify(candidateList, null, 2)}
 - Оценивай релевантность задания тематике, аудитории и охвату
 - Верни строго валидный JSON`
 
-  const msg = await anthropic.messages.create({
+  const msg = await getAnthropic().messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 4000,
     messages: [{ role: 'user', content: prompt }]
