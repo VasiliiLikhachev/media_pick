@@ -7,6 +7,7 @@ const ENTITY_TYPES: EntityType[] = ['СМИ', 'Конкурс', 'Научные 
 
 interface SearchMeta {
   keywords: string[]
+  region: string | null
   candidatesFound: number
   topN: number
 }
@@ -38,8 +39,10 @@ export default function HomePage() {
   const [topN, setTopN] = useState(20)
   const [loadingStep, setLoadingStep] = useState<LoadingStep>(null)
   const [results, setResults] = useState<ResultRow[] | null>(null)
+  const [candidates, setCandidates] = useState<Record<string, string | number | null>[] | null>(null)
   const [meta, setMeta] = useState<SearchMeta | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showCandidates, setShowCandidates] = useState(false)
 
   const toggleType = useCallback((type: EntityType) => {
     setEntityTypes(prev =>
@@ -75,6 +78,7 @@ export default function HomePage() {
       }
 
       setResults(data.results)
+      setCandidates(data.candidates || null)
       setMeta(data.meta)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Неизвестная ошибка'
@@ -194,6 +198,80 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* Candidates raw view */}
+      {showCandidates && candidates && !isLoading && (
+        <div style={{ marginBottom: 24 }}>
+          <div className="results-header">
+            <div className="results-title" style={{ fontSize: 14, color: 'var(--text-muted)' }}>
+              Кандидаты из базы
+              <span style={{ marginLeft: 8, fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--text-dim)' }}>
+                {candidates.length} записей
+              </span>
+            </div>
+          </div>
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Название</th>
+                  <th>Тип</th>
+                  <th>Тематика</th>
+                  <th>Описание</th>
+                  <th>Отрасли</th>
+                  <th>Регион</th>
+                  <th>Трафик</th>
+                  <th>Цена</th>
+                  <th>База</th>
+                </tr>
+              </thead>
+              <tbody>
+                {candidates.map((row, i) => (
+                  <tr key={i}>
+                    <td className="rank-cell">{i + 1}</td>
+                    <td className="name-cell">
+                      {row.url ? (
+                        <a href={String(row.url)} target="_blank" rel="noopener noreferrer">
+                          {String(row.name || '—')}
+                        </a>
+                      ) : (
+                        String(row.name || '—')
+                      )}
+                    </td>
+                    <td>
+                      {row.entity_type ? (
+                        <span className="subtype-tag">{String(row.entity_type)}</span>
+                      ) : '—'}
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      {String(row.topic || '—')}
+                    </td>
+                    <td className="reason-cell" style={{ fontSize: 12 }}>
+                      {String(row.description || row['Описание generated'] || '—')}
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                      {String(row['Отрасли'] || '—')}
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      {row.entity_type === 'Научные статьи'
+                        ? String(row['Страны'] || '—')
+                        : String(row.region || '—')}
+                    </td>
+                    <td className="traffic-cell">{String(row.traffic || '—')}</td>
+                    <td className="price-cell">
+                      {row.price ? `${row.price}${row.currency ? ' ' + row.currency : ''}` : '—'}
+                    </td>
+                    <td style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                      {String(row.base_name || '—')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Results */}
       {results && !isLoading && (
         <div>
@@ -204,6 +282,20 @@ export default function HomePage() {
               {meta.keywords.map(kw => (
                 <span key={kw} className="kw-tag">{kw}</span>
               ))}
+              {meta.region && (
+                <span style={{
+                  background: 'rgba(245,166,35,0.1)',
+                  border: '1px solid rgba(245,166,35,0.25)',
+                  borderRadius: 4,
+                  color: 'var(--warning)',
+                  fontSize: 11,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  padding: '2px 8px',
+                  marginLeft: 4,
+                }}>
+                  📍 {meta.region}
+                </span>
+              )}
               <span className="meta-stat">
                 Найдено кандидатов: <strong>{meta.candidatesFound}</strong> →&nbsp;
                 отобрано <strong style={{ color: 'var(--accent)' }}>{results.length}</strong>
@@ -247,7 +339,6 @@ export default function HomePage() {
                     <th>Подтип</th>
                     <th>Трафик</th>
                     <th>Регион</th>
-                    <th>Тип публикации</th>
                     <th>Дата / Дедлайн</th>
                     <th>Формы участия</th>
                     <th>Индексирование</th>
@@ -296,9 +387,6 @@ export default function HomePage() {
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {row.Регион || <span style={{ color: 'var(--text-dim)' }}>—</span>}
-                      </td>
-                      <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                        {row['Тип публикации'] || <span style={{ color: 'var(--text-dim)' }}>—</span>}
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {row['Дата проведения'] || <span style={{ color: 'var(--text-dim)' }}>—</span>}

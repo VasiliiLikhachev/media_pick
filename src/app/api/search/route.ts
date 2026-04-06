@@ -9,6 +9,37 @@ function getAnthropic() {
   })
 }
 
+// Normalize traffic value to number (handles "15K", "1.2M", "123 456", 150000)
+function normalizeTraffic(val: string | number | null | undefined): number {
+  if (val === null || val === undefined || val === '') return 0
+  if (typeof val === 'number') return val
+  const s = String(val).replace(/\s/g, '').toUpperCase()
+  const num = parseFloat(s.replace(/[KМK]/g, '').replace(',', '.'))
+  if (isNaN(num)) return 0
+  if (s.includes('M') || s.includes('М')) return Math.round(num * 1_000_000)
+  if (s.includes('K') || s.includes('К')) return Math.round(num * 1_000)
+  return Math.round(num)
+}
+
+// Extract region/country from task text using simple heuristics
+async function extractRegion(task: string): Promise<string | null> {
+  const msg = await getAnthropic().messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 100,
+    messages: [{
+      role: 'user',
+      content: `Извлеки целевой регион/страну из PR-задания. Верни ТОЛЬКО одно слово или название страны на английском (например: Russia, USA, Germany). Если регион не указан — верни null.
+
+Задание: ${task}
+
+Ответ (только слово или null):`
+    }]
+  })
+  const text = (msg.content[0].type === 'text' ? msg.content[0].text : '').trim()
+  if (!text || text.toLowerCase() === 'null') return null
+  return text
+}
+
 // Step 1: Extract keywords from task using Claude
 async function extractKeywords(task: string): Promise<string[]> {
   const msg = await getAnthropic().messages.create({
@@ -81,14 +112,21 @@ async function fetchCandidates(keywords: string[], entityTypes: string[]): Promi
     throw new Error(`Supabase query failed: ${error.message}`)
   }
 
-  return (data || []) as MediaRow[]
+  const rows = (data || []) as MediaRow[]
+
+  // Filter by minimum traffic threshold and sort descending
+  const MIN_TRAFFIC = 15_000
+  return rows
+    .filter(r => normalizeTraffic(r.traffic) >= MIN_TRAFFIC)
+    .sort((a, b) => normalizeTraffic(b.traffic) - normalizeTraffic(a.traffic))
 }
 
 // Step 3: Claude ranks candidates and generates причина_выбора + тематика
 async function rankCandidates(
   task: string,
   candidates: MediaRow[],
-  topN: number
+  topN: number,
+  region: string | null = null
 ): Promise<ResultRow[]> {
   if (candidates.length === 0) return []
 
@@ -162,8 +200,7 @@ ${JSON.stringify(candidateList, null, 2)}
           'Из какой базы': row.base_name || '',
           Подтип: subtype,
           Трафик: row.traffic || '',
-          'Тип публикации': row['Тип публикации'] || '',
-          'Дата проведения': row['Крайняя дата подачи'] || '',
+              'Дата проведения': row['Крайняя дата подачи'] || '',
           'Формы участия': row['Доступные формы участия'] || '',
           'Индексирование и архивирование': row['Индексирование и архивирование'] || '',
           Регион: row.entity_type === 'Научные статьи' ? (row['Страны'] || '') : (row.region || ''),
@@ -193,7 +230,6 @@ ${JSON.stringify(candidateList, null, 2)}
       'Из какой базы': row.base_name || '',
       Подтип: subtype,
       Трафик: row.traffic || '',
-      'Тип публикации': row['Тип публикации'] || '',
       'Дата проведения': row['Крайняя дата подачи'] || '',
       'Формы участия': row['Доступные формы участия'] || '',
       'Индексирование и архивирование': row['Индексирование и архивирование'] || '',
@@ -213,22 +249,42 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Задание слишком короткое' }, { status: 400 })
     }
 
-    const keywords = await extractKeywords(task)
+    const [keywords, region] = await Promise.all([
+      extractKeywords(task),
+      extractRegion(task),
+    ])
     const candidates = await fetchCandidates(keywords, entityTypes)
 
     if (candidates.length === 0) {
       return NextResponse.json({
         results: [],
-        meta: { keywords, candidatesFound: 0 }
+        meta: { keywords, region, candidatesFound: 0 }
       })
     }
 
-    const results = await rankCandidates(task, candidates, topN)
+    const results = await rankCandidates(task, candidates, topN, region)
 
     return NextResponse.json({
       results,
+      candidates: candidates.map(row => ({
+        id: row.id,
+        name: row.name,
+        url: row.url,
+        entity_type: row.entity_type,
+        topic: row.topic,
+        description: row.description,
+        'Описание generated': row['Описание generated'],
+        'Отрасли': row['Отрасли'],
+        region: row.region,
+        'Страны': row['Страны'],
+        traffic: row.traffic,
+        price: row.price,
+        currency: row.currency,
+        base_name: row.base_name,
+      })),
       meta: {
         keywords,
+        region,
         candidatesFound: candidates.length,
         topN,
       }

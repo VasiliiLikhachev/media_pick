@@ -48,7 +48,6 @@ export interface ResultRow {
   'Из какой базы': string
   Подтип: string
   Трафик: string
-  'Тип публикации': string
   'Дата проведения': string
   'Формы участия': string
   'Индексирование и архивирование': string
