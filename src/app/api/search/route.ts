@@ -1,298 +1,114 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
 import Anthropic from '@anthropic-ai/sdk'
-import { MediaRow, ResultRow, SearchParams } from '@/lib/types'
+import { MediaRow, ResultRow } from '@/lib/types'
 
 function getAnthropic() {
-  return new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY!,
-  })
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 }
 
-// Normalize traffic value to number (handles "15K", "1.2M", "123 456", 150000)
-function normalizeTraffic(val: string | number | null | undefined): number {
-  if (val === null || val === undefined || val === '') return 0
-  if (typeof val === 'number') return val
-  const s = String(val).replace(/\s/g, '').toUpperCase()
-  const num = parseFloat(s.replace(/[KМK]/g, '').replace(',', '.'))
-  if (isNaN(num)) return 0
-  if (s.includes('M') || s.includes('М')) return Math.round(num * 1_000_000)
-  if (s.includes('K') || s.includes('К')) return Math.round(num * 1_000)
-  return Math.round(num)
-}
+const trim = (s: string | null | undefined, len = 120) => s ? s.slice(0, len) : ''
 
-// Extract region/country from task text using simple heuristics
-async function extractRegion(task: string): Promise<string | null> {
-  const msg = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 100,
-    messages: [{
-      role: 'user',
-      content: `Извлеки целевой регион/страну из PR-задания. Верни ТОЛЬКО одно слово или название страны на английском (например: Russia, USA, Germany). Если регион не указан — верни null.
-
-Задание: ${task}
-
-Ответ (только слово или null):`
-    }]
-  })
-  const text = (msg.content[0].type === 'text' ? msg.content[0].text : '').trim()
-  if (!text || text.toLowerCase() === 'null') return null
-  return text
-}
-
-// Step 1: Extract keywords from task using Claude
-async function extractKeywords(task: string): Promise<string[]> {
-  const msg = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 300,
-    messages: [{
-      role: 'user',
-      content: `Извлеки 8-12 ключевых слов и фраз из следующего PR-задания для поиска подходящих медиа.
-Верни ТОЛЬКО JSON массив строк, без пояснений.
-Слова должны быть короткими (1-2 слова), релевантны тематике, отрасли, аудитории.
-Включай как русские так и английские варианты ключевых слов если применимо.
-
-Задание: ${task}
-
-Пример ответа: ["финтех", "банк", "технологии", "fintech", "IT", "инвестиции"]`
-    }]
-  })
-
-  const text = msg.content[0].type === 'text' ? msg.content[0].text : '[]'
+export async function POST(req: NextRequest) {
   try {
-    const clean = text.replace(/```json|```/g, '').trim()
-    return JSON.parse(clean)
-  } catch {
-    return task.split(/\s+/).filter(w => w.length > 3).slice(0, 8)
-  }
-}
+    const { task, candidates, topN, region } = await req.json()
 
-// Step 2: Query Supabase with ILIKE across semantic fields
-async function fetchCandidates(keywords: string[], entityTypes: string[]): Promise<MediaRow[]> {
-  const semanticFields = [
-    'description',
-    'topic',
-    'Для кого',
-    'Для кого / есть ли органичения?',
-    'Категории или кластеры',
-    'Номинации',
-    'Описание SimilarWeb',
-    'Описание generated',
-    'Отрасли',
-    'Specifics',
-    'name',
-    'region',
-  ]
-
-  // Build OR conditions for ILIKE
-  const orConditions: string[] = []
-  for (const field of semanticFields) {
-    for (const kw of keywords) {
-      orConditions.push(`"${field}".ilike.%${kw}%`)
+    if (!candidates?.length) {
+      return NextResponse.json({ results: [] })
     }
-  }
 
-  let query = getSupabase()
-    .from('media_base')
-    .select('*')
-    .limit(400)
+    const limited: MediaRow[] = candidates.slice(0, 60)
 
-  if (entityTypes.length > 0) {
-    query = query.in('entity_type', entityTypes)
-  }
+    const candidateList = limited.map((row: MediaRow, idx: number) => ({
+      idx,
+      name: row.name || '',
+      type: row.entity_type || '',
+      description: trim(row.description || row['Описание generated'], 150),
+      topics: trim(row.topic, 80),
+      industries: trim(row['Отрасли'], 80),
+      audience: trim(row['Для кого'], 80),
+      categories: trim(row['Категории или кластеры'], 80),
+      nominations: trim(row['Номинации'], 80),
+      region: row.region || '',
+      drawbacks: trim(row['Недостатки издания'], 80),
+    }))
 
-  if (orConditions.length > 0) {
-    query = query.or(orConditions.join(','))
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    console.error('Supabase error:', error)
-    throw new Error(`Supabase query failed: ${error.message}`)
-  }
-
-  const rows = (data || []) as MediaRow[]
-
-  // Filter by minimum traffic threshold and sort descending
-  const MIN_TRAFFIC = 15_000
-  return rows
-    .filter(r => normalizeTraffic(r.traffic) >= MIN_TRAFFIC)
-    .sort((a, b) => normalizeTraffic(b.traffic) - normalizeTraffic(a.traffic))
-}
-
-// Step 3: Claude ranks candidates and generates причина_выбора + тематика
-async function rankCandidates(
-  task: string,
-  candidates: MediaRow[],
-  topN: number,
-  region: string | null = null
-): Promise<ResultRow[]> {
-  if (candidates.length === 0) return []
-
-  // Limit to 60 candidates max to stay within Claude context
-  const limited = candidates.slice(0, 60)
-
-  const trim = (s: string | null | undefined, len = 120) =>
-    s ? s.slice(0, len) : ''
-
-  const candidateList = limited.map((row, idx) => ({
-    idx,
-    name: row.name || '',
-    type: row.entity_type || '',
-    description: trim(row.description || row['Описание generated'], 150),
-    topics: trim(row.topic, 80),
-    industries: trim(row['Отрасли'], 80),
-    audience: trim(row['Для кого'], 80),
-    categories: trim(row['Категории или кластеры'], 80),
-    nominations: trim(row['Номинации'], 80),
-    region: row.region || '',
-    drawbacks: trim(row['Недостатки издания'], 80),
-  }))
-
-  const prompt = `Ты помощник PR-специалиста. Выбери топ-${topN} наиболее подходящих медиа/площадок для задания ниже.
+    const prompt = `Ты помощник PR-специалиста. Выбери топ-${topN} наиболее подходящих медиа для задания.
 
 ЗАДАНИЕ: ${task}
 
-КАНДИДАТЫ (всего ${candidates.length}):
+КАНДИДАТЫ (${limited.length}):
 ${JSON.stringify(candidateList, null, 2)}
 
-Верни ТОЛЬКО JSON массив объектов в таком формате (без пояснений, без markdown):
-[
-  {
-    "idx": <число — индекс из списка кандидатов>,
-    "причина_выбора": "<2-3 предложения: почему это медиа подходит для задания>",
-    "тематика": "<1-2 слова: основная тематика площадки>"
-  }
-]
+Верни ТОЛЬКО JSON массив без пояснений и markdown:
+[{"idx": 0, "причина_выбора": "...", "тематика": "..."}]
 
 Правила:
-- Выбери ровно ${topN} лучших (или меньше, если кандидатов недостаточно)
-- Если у кандидата есть "drawbacks" (недостатки), добавь ⚠️ в начало причины выбора с кратким упоминанием
-- Оценивай релевантность задания тематике, аудитории и охвату
+- Выбери ровно ${topN} лучших (или меньше если кандидатов недостаточно)
+- ГЕОГРАФИЯ: ${region ? `Целевой регион — ${region}. Жёстко исключай издания из других регионов, не имеющих отношения к ${region}.` : 'Учитывай регион из задания если указан.'}
+- СПЕЦИАЛИЗАЦИЯ: Исключай издания общей тематики без прямой связи с профилем клиента.
+- ТРАФИК: Кандидаты отсортированы по трафику — при прочих равных предпочитай более охватные.
+- Если есть "drawbacks" — добавь ⚠️ в начало причины выбора.
 - Верни строго валидный JSON`
 
-  const msg = await getAnthropic().messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 4000,
-    messages: [{ role: 'user', content: prompt }]
-  })
+    const msg = await getAnthropic().messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: prompt }]
+    })
 
-  const text = msg.content[0].type === 'text' ? msg.content[0].text : '[]'
+    const text = msg.content[0].type === 'text' ? msg.content[0].text : '[]'
 
-  let rankings: Array<{ idx: number; причина_выбора: string; тематика: string }> = []
-  try {
-    // Extract JSON array from response — Claude sometimes adds preamble or error text
-    const jsonMatch = text.match(/\[\s*\{[\s\S]*\}\s*\]/)
-    if (!jsonMatch) {
-      console.error('No JSON array found in Claude response:', text.slice(0, 300))
-      // Fallback: return top N candidates with generic reason
-      return candidates.slice(0, topN).map((row, position) => {
-        const subtype = row['Подтип'] || row['подтип.1'] || ''
-        return {
-          Критерий: String(position + 1),
+    let rankings: Array<{ idx: number; причина_выбора: string; тематика: string }> = []
+    try {
+      const jsonMatch = text.match(/\[\s*\{[\s\S]*\}\s*\]/)
+      if (!jsonMatch) throw new Error('No JSON array in response')
+      rankings = JSON.parse(jsonMatch[0])
+    } catch {
+      // Fallback
+      return NextResponse.json({
+        results: limited.slice(0, topN).map((row: MediaRow, i: number) => ({
+          Критерий: String(i + 1),
           Название: row.name || '',
           Ссылка: row.url || '',
           'Цена из базы': row.price || '',
           Валюта: row.currency || '',
-          'Причина выбора': row.description || row['Описание generated'] || 'Релевантная площадка по теме задания',
+          'Причина выбора': row.description || row['Описание generated'] || '',
           Тематика: row.topic || '',
           'Из какой базы': row.base_name || '',
-          Подтип: subtype,
+          Подтип: row['Подтип'] || row['подтип.1'] || '',
           Трафик: row.traffic || '',
-              'Дата проведения': row['Крайняя дата подачи'] || '',
+          'Дата проведения': row['Крайняя дата подачи'] || '',
           'Формы участия': row['Доступные формы участия'] || '',
           'Индексирование и архивирование': row['Индексирование и архивирование'] || '',
-          Регион: row.entity_type === 'Научные статьи' ? (row['Страны'] || '') : (row.region || ''),
-        } as ResultRow
-      })
-    }
-    rankings = JSON.parse(jsonMatch[0])
-  } catch (e) {
-    console.error('Failed to parse Claude response:', text.slice(0, 300))
-    throw new Error('Ошибка парсинга ответа Claude: ' + (e instanceof Error ? e.message : String(e)))
-  }
-
-  return rankings.map((r, position) => {
-    const row = limited[r.idx]
-    if (!row) return null
-
-    const subtype = row['Подтип'] || row['подтип.1'] || ''
-
-    return {
-      Критерий: String(position + 1),
-      Название: row.name || '',
-      Ссылка: row.url || '',
-      'Цена из базы': row.price || '',
-      Валюта: row.currency || '',
-      'Причина выбора': r.причина_выбора || '',
-      Тематика: r.тематика || '',
-      'Из какой базы': row.base_name || '',
-      Подтип: subtype,
-      Трафик: row.traffic || '',
-      'Дата проведения': row['Крайняя дата подачи'] || '',
-      'Формы участия': row['Доступные формы участия'] || '',
-      'Индексирование и архивирование': row['Индексирование и архивирование'] || '',
-      Регион: row.entity_type === 'Научные статьи'
-        ? (row['Страны'] || '')
-        : (row.region || ''),
-    } as ResultRow
-  }).filter(Boolean) as ResultRow[]
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const body: SearchParams = await req.json()
-    const { task, entityTypes, topN } = body
-
-    if (!task || task.trim().length < 5) {
-      return NextResponse.json({ error: 'Задание слишком короткое' }, { status: 400 })
-    }
-
-    const [keywords, region] = await Promise.all([
-      extractKeywords(task),
-      extractRegion(task),
-    ])
-    const candidates = await fetchCandidates(keywords, entityTypes)
-
-    if (candidates.length === 0) {
-      return NextResponse.json({
-        results: [],
-        meta: { keywords, region, candidatesFound: 0 }
+          Регион: row.region || '',
+        }))
       })
     }
 
-    const results = await rankCandidates(task, candidates, topN, region)
+    const results: ResultRow[] = rankings.map((r, position) => {
+      const row = limited[r.idx]
+      if (!row) return null
+      return {
+        Критерий: String(position + 1),
+        Название: row.name || '',
+        Ссылка: row.url || '',
+        'Цена из базы': row.price || '',
+        Валюта: row.currency || '',
+        'Причина выбора': r.причина_выбора || '',
+        Тематика: r.тематика || '',
+        'Из какой базы': row.base_name || '',
+        Подтип: row['Подтип'] || row['подтип.1'] || '',
+        Трафик: String(row.traffic || ''),
+        'Дата проведения': row['Крайняя дата подачи'] || '',
+        'Формы участия': row['Доступные формы участия'] || '',
+        'Индексирование и архивирование': row['Индексирование и архивирование'] || '',
+        Регион: row.region || '',
+      } as ResultRow
+    }).filter(Boolean) as ResultRow[]
 
-    return NextResponse.json({
-      results,
-      candidates: candidates.map(row => ({
-        id: row.id,
-        name: row.name,
-        url: row.url,
-        entity_type: row.entity_type,
-        topic: row.topic,
-        description: row.description,
-        'Описание generated': row['Описание generated'],
-        'Отрасли': row['Отрасли'],
-        region: row.region,
-        'Страны': row['Страны'],
-        traffic: row.traffic,
-        price: row.price,
-        currency: row.currency,
-        base_name: row.base_name,
-      })),
-      meta: {
-        keywords,
-        region,
-        candidatesFound: candidates.length,
-        topN,
-      }
-    })
-
-  } catch (err: unknown) {
-    console.error('Search API error:', err)
-    const message = err instanceof Error ? err.message : 'Неизвестная ошибка'
+    return NextResponse.json({ results })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Ошибка'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
