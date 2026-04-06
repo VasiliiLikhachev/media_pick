@@ -47,9 +47,20 @@ export async function POST(req: NextRequest) {
 
     const rows = data || []
 
+    // Filter by region if specified
+    const matchesRegion = (rowRegion: string | null | undefined): boolean => {
+      if (!region) return true
+      const target = region.toLowerCase()
+      const rr = String(rowRegion || '').toLowerCase()
+      if (!rr) return true
+      if (target === 'russia') return rr.includes('russia')
+      return rr.includes(target) || rr.includes('international') || rr.includes('global')
+    }
+
     // Filter by traffic >= 15000 and sort descending
     const filtered = rows
       .filter(r => normalizeTraffic(r.traffic) >= 15_000)
+      .filter(r => matchesRegion(r.region))
       .sort((a, b) => normalizeTraffic(b.traffic) - normalizeTraffic(a.traffic))
 
     return NextResponse.json({ candidates: filtered, total: filtered.length })
