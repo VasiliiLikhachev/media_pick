@@ -92,19 +92,24 @@ async function rankCandidates(
 ): Promise<ResultRow[]> {
   if (candidates.length === 0) return []
 
-  const candidateList = candidates.map((row, idx) => ({
+  // Limit to 60 candidates max to stay within Claude context
+  const limited = candidates.slice(0, 60)
+
+  const trim = (s: string | null | undefined, len = 120) =>
+    s ? s.slice(0, len) : ''
+
+  const candidateList = limited.map((row, idx) => ({
     idx,
     name: row.name || '',
     type: row.entity_type || '',
-    description: row.description || row['Описание generated'] || '',
-    topics: row.topic || '',
-    industries: row['Отрасли'] || '',
-    audience: row['Для кого'] || '',
-    categories: row['Категории или кластеры'] || '',
-    nominations: row['Номинации'] || '',
-    specifics: row['Specifics'] || '',
+    description: trim(row.description || row['Описание generated'], 150),
+    topics: trim(row.topic, 80),
+    industries: trim(row['Отрасли'], 80),
+    audience: trim(row['Для кого'], 80),
+    categories: trim(row['Категории или кластеры'], 80),
+    nominations: trim(row['Номинации'], 80),
     region: row.region || '',
-    drawbacks: row['Недостатки издания'] || '',
+    drawbacks: trim(row['Недостатки издания'], 80),
   }))
 
   const prompt = `Ты помощник PR-специалиста. Выбери топ-${topN} наиболее подходящих медиа/площадок для задания ниже.
@@ -139,15 +144,40 @@ ${JSON.stringify(candidateList, null, 2)}
 
   let rankings: Array<{ idx: number; причина_выбора: string; тематика: string }> = []
   try {
-    const clean = text.replace(/```json|```/g, '').trim()
-    rankings = JSON.parse(clean)
+    // Extract JSON array from response — Claude sometimes adds preamble or error text
+    const jsonMatch = text.match(/\[\s*\{[\s\S]*\}\s*\]/)
+    if (!jsonMatch) {
+      console.error('No JSON array found in Claude response:', text.slice(0, 300))
+      // Fallback: return top N candidates with generic reason
+      return candidates.slice(0, topN).map((row, position) => {
+        const subtype = row['Подтип'] || row['подтип.1'] || ''
+        return {
+          Критерий: String(position + 1),
+          Название: row.name || '',
+          Ссылка: row.url || '',
+          'Цена из базы': row.price || '',
+          Валюта: row.currency || '',
+          'Причина выбора': row.description || row['Описание generated'] || 'Релевантная площадка по теме задания',
+          Тематика: row.topic || '',
+          'Из какой базы': row.base_name || '',
+          Подтип: subtype,
+          Трафик: row.traffic || '',
+          'Тип публикации': row['Тип публикации'] || '',
+          'Дата проведения': row['Крайняя дата подачи'] || '',
+          'Формы участия': row['Доступные формы участия'] || '',
+          'Индексирование и архивирование': row['Индексирование и архивирование'] || '',
+          Регион: row.entity_type === 'Научные статьи' ? (row['Страны'] || '') : (row.region || ''),
+        } as ResultRow
+      })
+    }
+    rankings = JSON.parse(jsonMatch[0])
   } catch (e) {
-    console.error('Failed to parse Claude response:', text)
-    throw new Error('Claude вернул невалидный JSON')
+    console.error('Failed to parse Claude response:', text.slice(0, 300))
+    throw new Error('Ошибка парсинга ответа Claude: ' + (e instanceof Error ? e.message : String(e)))
   }
 
   return rankings.map((r, position) => {
-    const row = candidates[r.idx]
+    const row = limited[r.idx]
     if (!row) return null
 
     const subtype = row['Подтип'] || row['подтип.1'] || ''
