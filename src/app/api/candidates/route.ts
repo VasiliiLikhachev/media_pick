@@ -145,6 +145,26 @@ function buildOrConditions(fields: string[], keywords: string[]): string[] {
   return conditions
 }
 
+// ── Negative content filter — exclude шоу-бизнес rows ─────────────────────
+const NEGATIVE_PATTERNS = [
+  /шоу[- ]?бизнес/i,
+  /show[- ]?business/i,
+  /шоубиз/i,
+]
+
+const NEGATIVE_CHECK_FIELDS = [
+  'name', 'description', 'Описание generated', 'Описание SimilarWeb',
+  'topic', 'Отрасли', 'Категории или кластеры', 'Для кого',
+]
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function hasNegativeContent(row: Record<string, any>): boolean {
+  return NEGATIVE_CHECK_FIELDS.some(field => {
+    const val = String(row[field] ?? '')
+    return NEGATIVE_PATTERNS.some(p => p.test(val))
+  })
+}
+
 const PRIMARY_FIELDS = ['description', 'Описание generated', 'Описание SimilarWeb']
 const SECONDARY_FIELDS = ['name', 'Отрасли', 'Категории или кластеры', 'Для кого', 'Для кого / есть ли органичения?', 'topic']
 const SELECT_COLS = 'id, name, url, entity_type, topic, description, "Описание generated", "Отрасли", region, "Страны", traffic, price, currency, base_name, "Недостатки издания", "Подтип", "подтип.1", "Крайняя дата подачи", "Доступные формы участия", "Индексирование и архивирование", "Для кого", "Категории или кластеры", "Номинации", "Часто одобряют"'
@@ -189,6 +209,9 @@ export async function POST(req: NextRequest) {
       r.entity_type === 'СМИ' ? normalizeTraffic(r.traffic) >= MIN_TRAFFIC : true
     )
 
+    // Exclude шоу-бизнес
+    filtered = filtered.filter(r => !hasNegativeContent(r))
+
     // ── Step 2: secondary fields if not enough ──
     if (filtered.length < MIN_PRIMARY) {
       const secondaryConditions = buildOrConditions(SECONDARY_FIELDS, keywords || [])
@@ -203,6 +226,9 @@ export async function POST(req: NextRequest) {
       filtered = filtered.filter(r =>
         r.entity_type === 'СМИ' ? normalizeTraffic(r.traffic) >= MIN_TRAFFIC : true
       )
+
+      // Exclude шоу-бизнес
+      filtered = filtered.filter(r => !hasNegativeContent(r))
     }
 
     // Sort by traffic descending
