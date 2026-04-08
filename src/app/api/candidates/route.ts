@@ -193,7 +193,7 @@ function parseDeadline(val: string | number | null | undefined): number | null {
 
 const PRIMARY_FIELDS = ['description', 'Описание generated', 'Описание SimilarWeb']
 const SECONDARY_FIELDS = ['name', 'Отрасли', 'Категории или кластеры', 'Для кого', 'Для кого / есть ли органичения?', 'topic']
-const SELECT_COLS = 'id, name, url, entity_type, topic, description, "Описание generated", "Отрасли", region, "Страны", traffic, price, currency, base_name, "Недостатки издания", "Подтип", "подтип.1", "Крайняя дата подачи", "Доступные формы участия", "Индексирование и архивирование", "Для кого", "Категории или кластеры", "Номинации", "Часто одобряют"'
+const SELECT_COLS = 'id, name, url, entity_type, topic, description, "Описание generated", "Отрасли", region, "Страны", traffic, price, currency, base_name, "Недостатки издания", "Подтип", "подтип.1", "Крайняя дата подачи", "Доступные формы участия", "Индексирование и архивирование", "Описание сроков выхода", "Для кого", "Категории или кластеры", "Номинации", "Часто одобряют"'
 const MIN_TRAFFIC = 15_000
 const MIN_PRIMARY = 30
 

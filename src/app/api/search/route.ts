@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 ${JSON.stringify(candidateList, null, 2)}
 
 Верни ТОЛЬКО JSON массив без пояснений и markdown:
-[{"idx": 0, "причина_выбора": "...", "тематика": "..."}]
+[{"idx": 0, "причина_выбора": "...", "тематика": "...", "описание": "..."}]
 
 Правила:
 - Выбери ровно ${topN} лучших (или меньше если кандидатов недостаточно)
@@ -48,6 +48,7 @@ ${JSON.stringify(candidateList, null, 2)}
 - СПЕЦИАЛИЗАЦИЯ: Исключай издания общей тематики без прямой связи с профилем клиента.
 - ТРАФИК: Кандидаты отсортированы по трафику — при прочих равных предпочитай более охватные.
 - Если есть "drawbacks" — добавь ⚠️ в начало причины выбора.
+- "описание" — нейтральная характеристика медиа/конкурса 1-2 предложения, независимо от задания. Используй description, topic, industries из данных кандидата.
 - Верни строго валидный JSON`
 
     const msg = await getAnthropic().messages.create({
@@ -58,7 +59,7 @@ ${JSON.stringify(candidateList, null, 2)}
 
     const text = msg.content[0].type === 'text' ? msg.content[0].text : '[]'
 
-    let rankings: Array<{ idx: number; причина_выбора: string; тематика: string }> = []
+    let rankings: Array<{ idx: number; причина_выбора: string; тематика: string; описание: string }> = []
     try {
       const jsonMatch = text.match(/\[\s*\{[\s\S]*\}\s*\]/)
       if (!jsonMatch) throw new Error('No JSON array in response')
@@ -73,6 +74,7 @@ ${JSON.stringify(candidateList, null, 2)}
           'Цена из базы': row.price || '',
           Валюта: row.currency || '',
           'Причина выбора': row.description || row['Описание generated'] || '',
+          Описание: '',
           Тематика: row.topic || '',
           'Из какой базы': row.base_name || '',
           Подтип: row['Подтип'] || row['подтип.1'] || '',
@@ -80,6 +82,7 @@ ${JSON.stringify(candidateList, null, 2)}
           'Дата проведения': row['Крайняя дата подачи'] || '',
           'Формы участия': row['Доступные формы участия'] || '',
           'Индексирование и архивирование': row['Индексирование и архивирование'] || '',
+          'Описание сроков выхода': row['Описание сроков выхода'] || '',
           Регион: row.region || '',
         }))
       })
@@ -95,6 +98,7 @@ ${JSON.stringify(candidateList, null, 2)}
         'Цена из базы': row.price || '',
         Валюта: row.currency || '',
         'Причина выбора': r.причина_выбора || '',
+        Описание: r.описание || '',
         Тематика: r.тематика || '',
         'Из какой базы': row.base_name || '',
         Подтип: row['Подтип'] || row['подтип.1'] || '',
@@ -102,6 +106,7 @@ ${JSON.stringify(candidateList, null, 2)}
         'Дата проведения': row['Крайняя дата подачи'] || '',
         'Формы участия': row['Доступные формы участия'] || '',
         'Индексирование и архивирование': row['Индексирование и архивирование'] || '',
+        'Описание сроков выхода': row['Описание сроков выхода'] || '',
         Регион: row.region || '',
       } as ResultRow
     }).filter(Boolean) as ResultRow[]

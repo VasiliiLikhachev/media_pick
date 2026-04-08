@@ -25,6 +25,7 @@ export interface MediaRow {
   'Крайняя дата подачи': string | null
   'Доступные формы участия': string | null
   'Индексирование и архивирование': string | null
+  'Описание сроков выхода': string | null
   'Страны': string | null
   'Недостатки издания': string | null
   'Specifics': string | null
@@ -44,6 +45,7 @@ export interface ResultRow {
   'Цена из базы': string
   Валюта: string
   'Причина выбора': string
+  Описание: string
   Тематика: string
   'Из какой базы': string
   Подтип: string
@@ -51,5 +53,6 @@ export interface ResultRow {
   'Дата проведения': string
   'Формы участия': string
   'Индексирование и архивирование': string
+  'Описание сроков выхода': string
   Регион: string
 }

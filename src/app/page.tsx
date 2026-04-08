@@ -372,6 +372,7 @@ export default function HomePage() {
                   <tr>
                     <th>#</th>
                     <th>Название</th>
+                    <th>Ссылка</th>
                     <th>Тип</th>
                     <th>Тематика</th>
                     <th>Описание</th>
@@ -390,6 +391,11 @@ export default function HomePage() {
                         {row.url
                           ? <a href={String(row.url)} target="_blank" rel="noopener noreferrer">{row.name || '—'}</a>
                           : (row.name || '—')}
+                      </td>
+                      <td style={{ fontSize: 11, maxWidth: 180, wordBreak: 'break-all' }}>
+                        {row.url
+                          ? <a href={String(row.url)} target="_blank" rel="noopener noreferrer">{String(row.url)}</a>
+                          : <span style={{ color: 'var(--text-dim)' }}>—</span>}
                       </td>
                       <td>{row.entity_type
                         ? <span className="subtype-tag">{String(row.entity_type)}</span>
@@ -452,6 +458,8 @@ export default function HomePage() {
                   <tr>
                     <th>#</th>
                     <th>Название</th>
+                    <th>Ссылка</th>
+                    <th>Описание</th>
                     <th>Тематика</th>
                     <th>Причина выбора</th>
                     <th>Цена</th>
@@ -459,8 +467,9 @@ export default function HomePage() {
                     <th>Трафик</th>
                     <th>Регион</th>
                     <th>Дата / Дедлайн</th>
+                    <th>Сроки выхода</th>
                     <th>Формы участия</th>
-                    <th>Индексирование</th>
+                    <th>Тип (ISSN / ISBN)</th>
                     <th>База</th>
                   </tr>
                 </thead>
@@ -472,6 +481,14 @@ export default function HomePage() {
                         {row.Ссылка
                           ? <a href={row.Ссылка} target="_blank" rel="noopener noreferrer">{row.Название}</a>
                           : row.Название}
+                      </td>
+                      <td style={{ fontSize: 11, maxWidth: 180, wordBreak: 'break-all' }}>
+                        {row.Ссылка
+                          ? <a href={row.Ссылка} target="_blank" rel="noopener noreferrer">{row.Ссылка}</a>
+                          : <span style={{ color: 'var(--text-dim)' }}>—</span>}
+                      </td>
+                      <td className="reason-cell" style={{ fontSize: 12 }}>
+                        {row.Описание || <span style={{ color: 'var(--text-dim)' }}>—</span>}
                       </td>
                       <td>{row.Тематика && <span className="topic-tag">{row.Тематика}</span>}</td>
                       <td className="reason-cell">
@@ -493,6 +510,9 @@ export default function HomePage() {
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {row['Дата проведения'] || <span style={{ color: 'var(--text-dim)' }}>—</span>}
+                      </td>
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        {row['Описание сроков выхода'] || <span style={{ color: 'var(--text-dim)' }}>—</span>}
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                         {row['Формы участия'] || <span style={{ color: 'var(--text-dim)' }}>—</span>}
