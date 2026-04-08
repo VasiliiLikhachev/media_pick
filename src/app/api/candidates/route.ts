@@ -165,7 +165,33 @@ function hasNegativeContent(row: Record<string, any>): boolean {
   })
 }
 
-const PRIMARY_FIELDS = ['description', 'Описание generated', 'Описание SimilarWeb']
+// ── Parse deadline date — returns timestamp or null ────────────────────────
+function parseDeadline(val: string | number | null | undefined): number | null {
+  if (!val) return null
+  const s = String(val).trim()
+  if (!s || s === '—' || s === '-') return null
+
+  // Try native Date parse (handles ISO, DD.MM.YYYY poorly — do manually first)
+  // DD.MM.YYYY or DD/MM/YYYY
+  const dmy = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/)
+  if (dmy) {
+    const d = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
+    if (!isNaN(d.getTime())) return d.getTime()
+  }
+
+  // YYYY-MM-DD
+  const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (ymd) {
+    const d = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
+    if (!isNaN(d.getTime())) return d.getTime()
+  }
+
+  // Fallback: let JS try
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : d.getTime()
+}
+
+['description', 'Описание generated', 'Описание SimilarWeb']
 const SECONDARY_FIELDS = ['name', 'Отрасли', 'Категории или кластеры', 'Для кого', 'Для кого / есть ли органичения?', 'topic']
 const SELECT_COLS = 'id, name, url, entity_type, topic, description, "Описание generated", "Отрасли", region, "Страны", traffic, price, currency, base_name, "Недостатки издания", "Подтип", "подтип.1", "Крайняя дата подачи", "Доступные формы участия", "Индексирование и архивирование", "Для кого", "Категории или кластеры", "Номинации", "Часто одобряют"'
 const MIN_TRAFFIC = 15_000
@@ -231,8 +257,21 @@ export async function POST(req: NextRequest) {
       filtered = filtered.filter(r => !hasNegativeContent(r))
     }
 
-    // Sort by traffic descending
-    filtered.sort((a, b) => normalizeTraffic(b.traffic) - normalizeTraffic(a.traffic))
+    // Sort: конкурсы — by deadline date asc (nulls last), others — by traffic desc
+    const isContest = filtered.length > 0 && filtered[0].entity_type === 'Конкурс'
+
+    if (isContest) {
+      filtered.sort((a, b) => {
+        const da = parseDeadline(a['Крайняя дата подачи'])
+        const db = parseDeadline(b['Крайняя дата подачи'])
+        if (da && db) return da - db      // both valid — nearest first
+        if (da) return -1                  // only a has date — a first
+        if (db) return 1                   // only b has date — b first
+        return 0                           // both null — keep order
+      })
+    } else {
+      filtered.sort((a, b) => normalizeTraffic(b.traffic) - normalizeTraffic(a.traffic))
+    }
 
     return NextResponse.json({ candidates: filtered, total: filtered.length })
   } catch (err) {

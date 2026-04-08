@@ -78,7 +78,7 @@ export default function HomePage() {
   const [results, setResults] = useState<ResultRow[]>([])
 
   const toggleType = useCallback((type: EntityType) => {
-    setEntityTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type])
+    setEntityTypes([type])
   }, [])
 
   // ── Step 1: Extract keywords ──
@@ -402,7 +402,7 @@ export default function HomePage() {
                       <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                         {String(row['Отрасли'] || '—').slice(0, 60)}
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 160, wordBreak: 'break-word' }}>
                         {String(row.region || '—')}
                       </td>
                       <td className="traffic-cell">{row.traffic ? Number(row.traffic).toLocaleString() : '—'}</td>
@@ -488,7 +488,7 @@ export default function HomePage() {
                       <td className="traffic-cell">
                         {row.Трафик ? Number(row.Трафик).toLocaleString() : <span style={{ color: 'var(--text-dim)' }}>—</span>}
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 160, wordBreak: 'break-word' }}>
                         {row.Регион || <span style={{ color: 'var(--text-dim)' }}>—</span>}
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
