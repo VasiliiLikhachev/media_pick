@@ -24,7 +24,7 @@ interface CandidateRow {
   [key: string]: string | number | null | undefined
 }
 
-function downloadCSV(results: ResultRow[]) {
+function downloadCSV(results: ResultRow[], entityType: string) {
   if (!results.length) return
   const headers = Object.keys(results[0])
   const rows = results.map(r =>
@@ -35,7 +35,7 @@ function downloadCSV(results: ResultRow[]) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `media_selection_${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = `${entityType}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -439,7 +439,7 @@ export default function HomePage() {
               <span className="results-title">Результаты подборки</span>
             </div>
             {results.length > 0 && (
-              <button className="btn-secondary" onClick={() => downloadCSV(results)}>
+              <button className="btn-secondary" onClick={() => downloadCSV(results, entityTypes[0] || 'media')}>
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                   <path d="M6.5 1V9M6.5 9L3.5 6M6.5 9L9.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M1 11H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
