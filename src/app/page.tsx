@@ -408,8 +408,8 @@ export default function HomePage() {
                       <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                         {String(row['Отрасли'] || '—').slice(0, 60)}
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 160, wordBreak: 'break-word' }}>
-                        {String(row.region || '—')}
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={String(row.region || '')}>
+                        {String(row.region || '—').slice(0, 60)}{String(row.region || '').length > 60 ? '…' : ''}
                       </td>
                       <td className="traffic-cell">{row.traffic ? Number(row.traffic).toLocaleString() : '—'}</td>
                       <td className="price-cell">
@@ -505,8 +505,8 @@ export default function HomePage() {
                       <td className="traffic-cell">
                         {row.Трафик ? Number(row.Трафик).toLocaleString() : <span style={{ color: 'var(--text-dim)' }}>—</span>}
                       </td>
-                      <td style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 160, wordBreak: 'break-word' }}>
-                        {row.Регион || <span style={{ color: 'var(--text-dim)' }}>—</span>}
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={row.Регион || ''}>
+                        {(row.Регион || '—').slice(0, 60)}{(row.Регион || '').length > 60 ? '…' : ''}
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {row['Дата проведения'] || <span style={{ color: 'var(--text-dim)' }}>—</span>}
