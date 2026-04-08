@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import { EntityType, ResultRow } from '@/lib/types'
 
-const ENTITY_TYPES: EntityType[] = ['СМИ', 'Конкурс', 'Научные статьи', 'Ассоциация']
+const ENTITY_TYPES: EntityType[] = ['СМИ', 'Конкурс', 'Научная статья', 'Ассоциация']
 
 type Step = 'idle' | 'keywords_loading' | 'keywords_done' | 'candidates_loading' | 'candidates_done' | 'ranking_loading' | 'results_done'
 

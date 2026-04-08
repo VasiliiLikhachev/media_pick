@@ -1,4 +1,4 @@
-export type EntityType = 'СМИ' | 'Конкурс' | 'Научные статьи' | 'Ассоциация'
+export type EntityType = 'СМИ' | 'Конкурс' | 'Научная статья' | 'Ассоциация'
 
 export interface MediaRow {
   id: number
