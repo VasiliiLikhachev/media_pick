@@ -76,6 +76,19 @@ export default function HomePage() {
 
   // Step 3 output
   const [results, setResults] = useState<ResultRow[]>([])
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
+
+  const toggleRow = useCallback((i: number) => {
+    setSelectedRows(prev => {
+      const next = new Set(prev)
+      next.has(i) ? next.delete(i) : next.add(i)
+      return next
+    })
+  }, [])
+
+  const toggleAllRows = useCallback((total: number) => {
+    setSelectedRows(prev => prev.size === total ? new Set() : new Set(Array.from({ length: total }, (_, i) => i)))
+  }, [])
 
   const toggleType = useCallback((type: EntityType) => {
     setEntityTypes([type])
@@ -146,6 +159,7 @@ export default function HomePage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setResults(data.results || [])
+      setSelectedRows(new Set())
       setStep('results_done')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')
@@ -370,6 +384,14 @@ export default function HomePage() {
               <table>
                 <thead>
                   <tr>
+                    <th style={{ width: 32 }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedRows.size === results.length && results.length > 0}
+                        onChange={() => toggleAllRows(results.length)}
+                        title="Выбрать все"
+                      />
+                    </th>
                     <th>#</th>
                     <th>Название</th>
                     <th>Ссылка</th>
@@ -439,12 +461,15 @@ export default function HomePage() {
               <span className="results-title">Результаты подборки</span>
             </div>
             {results.length > 0 && (
-              <button className="btn-secondary" onClick={() => downloadCSV(results, entityTypes[0] || 'media')}>
+              <button className="btn-secondary" onClick={() => {
+                const toExport = selectedRows.size > 0 ? results.filter((_, i) => selectedRows.has(i)) : results
+                downloadCSV(toExport, entityTypes[0] || 'media')
+              }}>
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                   <path d="M6.5 1V9M6.5 9L3.5 6M6.5 9L9.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M1 11H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                 </svg>
-                Скачать CSV
+                {selectedRows.size > 0 ? `Скачать CSV (${selectedRows.size})` : 'Скачать CSV'}
               </button>
             )}
           </div>
@@ -475,7 +500,14 @@ export default function HomePage() {
                 </thead>
                 <tbody>
                   {results.map((row, i) => (
-                    <tr key={i}>
+                    <tr key={i} style={{ background: selectedRows.has(i) ? 'var(--accent-dim)' : undefined }}>
+                      <td style={{ textAlign: 'center', width: 32 }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedRows.has(i)}
+                          onChange={() => toggleRow(i)}
+                        />
+                      </td>
                       <td className="rank-cell">{row.Критерий}</td>
                       <td className="name-cell">
                         {row.Ссылка
