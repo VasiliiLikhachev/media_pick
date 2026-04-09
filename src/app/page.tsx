@@ -40,6 +40,35 @@ function downloadCSV(results: ResultRow[], entityType: string) {
   URL.revokeObjectURL(url)
 }
 
+
+function getCopyColumns(entityType: string): (keyof ResultRow)[] {
+  switch (entityType) {
+    case 'СМИ':
+      return ['Название', 'Ссылка', 'Цена из базы', 'Трафик']
+    case 'Конкурс':
+      return ['Название', 'Ссылка', 'Дата проведения', 'Цена из базы', 'Описание']
+    case 'Научная статья':
+      return ['Название', 'Ссылка', 'Цена из базы', 'Индексирование и архивирование', 'Тематика', 'Описание сроков выхода']
+    case 'Ассоциация':
+      return ['Название', 'Ссылка', 'Цена из базы', 'Описание']
+    default:
+      return ['Название', 'Ссылка', 'Цена из базы']
+  }
+}
+
+function copyTableToClipboard(rows: ResultRow[], entityType: string): Promise<void> {
+  const cols = getCopyColumns(entityType)
+  const tsv = rows.map(r =>
+    cols.map(col => {
+      let val = String((r as unknown as Record<string, string>)[col] ?? '')
+      // Для цены добавляем валюту
+      if (col === 'Цена из базы' && r.Валюта) val = val ? `${val} ${r.Валюта}` : ''
+      return val
+    }).join('\t')
+  ).join('\n')
+  return navigator.clipboard.writeText(tsv)
+}
+
 function Tag({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
     <span style={{
@@ -77,6 +106,7 @@ export default function HomePage() {
   // Step 3 output
   const [results, setResults] = useState<ResultRow[]>([])
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
+  const [copied, setCopied] = useState(false)
 
   const toggleRow = useCallback((i: number) => {
     setSelectedRows(prev => {
@@ -461,16 +491,42 @@ export default function HomePage() {
               <span className="results-title">Результаты подборки</span>
             </div>
             {results.length > 0 && (
-              <button className="btn-secondary" onClick={() => {
-                const toExport = selectedRows.size > 0 ? results.filter((_, i) => selectedRows.has(i)) : results
-                downloadCSV(toExport, entityTypes[0] || 'media')
-              }}>
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                  <path d="M6.5 1V9M6.5 9L3.5 6M6.5 9L9.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M1 11H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-                {selectedRows.size > 0 ? `Скачать CSV (${selectedRows.size})` : 'Скачать CSV'}
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn-secondary" onClick={() => {
+                  const toExport = selectedRows.size > 0 ? results.filter((_, i) => selectedRows.has(i)) : results
+                  downloadCSV(toExport, entityTypes[0] || 'media')
+                }}>
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <path d="M6.5 1V9M6.5 9L3.5 6M6.5 9L9.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M1 11H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  {selectedRows.size > 0 ? `Скачать CSV (${selectedRows.size})` : 'Скачать CSV'}
+                </button>
+                <button className="btn-secondary" onClick={() => {
+                  const toExport = selectedRows.size > 0 ? results.filter((_, i) => selectedRows.has(i)) : results
+                  copyTableToClipboard(toExport, entityTypes[0] || '').then(() => {
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 2000)
+                  })
+                }}>
+                  {copied ? (
+                    <>
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                        <path d="M2 7L5 10L11 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Скопировано
+                    </>
+                  ) : (
+                    <>
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                        <rect x="4" y="4" width="8" height="8" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+                        <path d="M2 9V2h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      {selectedRows.size > 0 ? `Копировать (${selectedRows.size})` : 'Копировать'}
+                    </>
+                  )}
+                </button>
+              </div>
             )}
           </div>
 
